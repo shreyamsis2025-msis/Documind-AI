@@ -1,0 +1,7 @@
+OLLAMA_MODEL = "phi3"
+
+DATA_PATH = "data"
+FAISS_PATH = "faiss_index"
+
+CHUNK_SIZE = 700
+CHUNK_OVERLAP = 120
