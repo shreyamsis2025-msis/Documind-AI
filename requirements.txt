@@ -9,3 +9,4 @@ python-docx
 pandas
 ollama
 openpyxl
+docx2txt
