@@ -10,18 +10,21 @@ class RAGChat:
 
     def ask(self, query: str):
 
-        # ✅ If no documents → normal LLM chat
         if self.db is None:
-            return self.llm.invoke(query)
+            return {
+                "answer": self.llm.invoke(query),
+                "sources": []
+            }
 
-        # ✅ If docs exist → RAG
         retriever = self.db.as_retriever(search_kwargs={"k": 3})
         docs = retriever.invoke(query)
 
+        # ---------- Build context ----------
         context = "\n\n".join([d.page_content for d in docs])
 
         prompt = f"""
-Answer using the context if relevant. If not, answer normally.
+Answer the question using the context below.
+If answer not in context, say you don't know.
 
 Context:
 {context}
@@ -30,4 +33,22 @@ Question:
 {query}
 """
 
-        return self.llm.invoke(prompt)
+        answer = self.llm.invoke(prompt)
+
+        # ---------- Extract source info ----------
+        sources = []
+        for d in docs:
+            meta = d.metadata
+            file = meta.get("source", "Unknown file")
+            page = meta.get("page", "")
+
+            if page != "":
+                sources.append(f"{file} (Page {page})")
+            else:
+                sources.append(file)
+
+        return {
+            "answer": answer,
+            "sources": list(set(sources)),  # remove duplicates
+            "snippets": [d.page_content[:200] for d in docs]
+        }
