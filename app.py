@@ -7,6 +7,12 @@ from ingestion.splitter import split_docs
 from vectordb.faiss_store import save_db
 from rag.pipeline import RAGChat
 from config import DATA_PATH
+from streamlit_mic_recorder import mic_recorder
+from voice.whisper_local import speech_to_text
+from streamlit_pdf_viewer import pdf_viewer
+
+if "open_pdf" not in st.session_state:
+    st.session_state.open_pdf = None
 
 # -------- SETTINGS --------
 STATIC_PATH = "static_docs"
@@ -77,7 +83,27 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-query = st.chat_input("Ask something about your documents...")
+col1, col2 = st.columns([6, 1])
+
+with col1:
+    text_query = st.chat_input("Ask something about your documents...")
+
+with col2:
+    audio = mic_recorder(start_prompt="🎤", stop_prompt="⏹️", key="voice")
+
+query = None
+
+# Voice input
+if audio:
+    try:
+        query = speech_to_text(audio["bytes"])
+        # st.success(f"You said: {query}")
+    except Exception as e:
+        st.error(f"Voice error: {e}")
+
+# Text input
+if text_query:
+    query = text_query
 
 if query:
     st.session_state.messages.append({"role": "user", "content": query})
@@ -91,33 +117,37 @@ if query:
     with st.chat_message("assistant"):
         st.write(result["answer"])
 
-        # -------- Sources --------
-        if result["sources"]:
-            st.markdown("### 📚 Sources")
+    if st.session_state.open_pdf:
+        file, page = st.session_state.open_pdf
+        file_path = os.path.join(DATA_PATH, file)
 
-            for s in result["sources"]:
-                # Split filename & page
-                if "(Page" in s:
-                    file, page = s.split("(Page")
-                    file = file.strip()
-                    page = page.replace(")", "").strip()
-                else:
-                    file = s
-                    page = None
+        if os.path.exists(file_path):
+            st.markdown("---")
+            st.markdown(f"### 📄 Viewing: {file} (Page {page})")
+            pdf_viewer(file_path, width=800, height=1000, page=page)
+        else:
+            st.error("File not found.")
 
-                file_url = f"/static_docs/{urllib.parse.quote(file)}"
+    # -------- Sources --------
+    if result["sources"]:
+        st.markdown("### 📚 Sources")
 
-                if page:
-                    st.markdown(
-                        f"• [{file} (Page {page})]({file_url}#page={page})"
-                    )
-                else:
-                    st.markdown(f"• [{file}]({file_url})")
+        for s in result["sources"]:
+            if "(Page" in s:
+                file, page = s.split("(Page")
+                file = file.strip()
+                page = int(page.replace(")", "").strip())
+            else:
+                file = s
+                page = 0
 
-            # -------- Show context --------
-            with st.expander("Show context used"):
-                for snip in result["snippets"]:
-                    st.write("-", snip)
+            if st.button(f"Open {file} (Page {page})"):
+                st.session_state.open_pdf = (file, page)
+
+        # -------- Show context --------
+        with st.expander("Show context used"):
+            for snip in result["snippets"]:
+                st.write("-", snip)
 
     st.session_state.messages.append(
         {"role": "assistant", "content": result["answer"]}
