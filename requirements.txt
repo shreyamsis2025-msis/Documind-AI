@@ -10,3 +10,10 @@ pandas
 ollama
 openpyxl
 docx2txt
+
+
+---------------
+faster-whisper 
+streamlit-mic-recorder
+
+streamlit-pdf-viewer
